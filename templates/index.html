@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Golang + WebRTC Meeting</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="/static/js/htmx.min.js"></script>
+</head>
+<body>
+  <div class="lobby-container">
+    <div class="lobby-card">
+      <div class="lobby-header">
+        <div class="logo-badge">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/>
+            <rect x="2" y="6" width="14" height="12" rx="2"/>
+          </svg>
+        </div>
+        <h1>MeetStream</h1>
+        <p>Lightweight WebRTC Video Calling powered by Go &amp; HTMX</p>
+      </div>
+
+      <form id="join-form" onsubmit="handleJoinSubmit(event)">
+        <div class="form-group">
+          <label for="display-name">Your Display Name</label>
+          <input
+            type="text"
+            id="display-name"
+            name="name"
+            class="form-input"
+            placeholder="e.g. Alice Walker"
+            required
+            autocomplete="name"
+            autofocus
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="room-id">Room Code</label>
+          <div class="input-with-button">
+            <input
+              type="text"
+              id="room-id"
+              name="room"
+              class="form-input"
+              placeholder="e.g. standup-daily"
+              required
+              pattern="[a-zA-Z0-9_-]+"
+              title="Letters, numbers, hyphens, and underscores only"
+            >
+            <button
+              type="button"
+              class="btn-secondary"
+              hx-get="/api/random-room"
+              hx-target="#room-id"
+              hx-swap="outerHTML"
+            >
+              Generate
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">
+          Join Meeting
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function handleJoinSubmit(e) {
+      e.preventDefault();
+      const name = encodeURIComponent(document.getElementById('display-name').value.trim());
+      const room = encodeURIComponent(document.getElementById('room-id').value.trim().toLowerCase());
+      if (name && room) {
+        window.location.href = `/room/${room}?name=${name}`;
+      }
+    }
+  </script>
+</body>
+</html>

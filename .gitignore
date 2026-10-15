@@ -1,0 +1,14 @@
+# Binaries
+webrtc-meeting
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+.DS_Store

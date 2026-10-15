@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room {{.RoomID}} - MeetStream</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="/static/js/htmx.min.js"></script>
+</head>
+<body>
+  <div class="room-app" id="room-app" data-room-id="{{.RoomID}}" data-client-name="{{.Name}}">
+    <!-- Header -->
+    <header class="room-header">
+      <div class="room-meta">
+        <div class="room-badge">
+          <div class="live-dot"></div>
+          <span>Room: {{.RoomID}}</span>
+        </div>
+        <div class="participants-counter" id="participants-count">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span id="participant-count-text">1 participant</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn-copy" id="btn-copy-link" onclick="copyMeetingLink()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          <span>Copy Link</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Workspace -->
+    <div class="room-workspace">
+      <!-- Video Grid Stage -->
+      <main class="video-stage">
+        <div class="video-grid" id="video-grid">
+          <!-- Local Video Tile -->
+          <div class="video-card local-tile" id="tile-local">
+            <video id="local-video" autoplay playsinline muted></video>
+            <div class="avatar-placeholder" id="local-avatar">
+              <div class="avatar-circle" id="local-avatar-initials">U</div>
+            </div>
+            <div class="video-overlay-badge">
+              <span id="local-badge-name">{{.Name}} (You)</span>
+              <div class="media-state-icons">
+                <span class="icon-badge" id="local-mic-badge" title="Microphone Active">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  </svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Controls Dock -->
+        <nav class="control-dock">
+          <!-- Mic Toggle -->
+          <button class="dock-btn" id="btn-mic" onclick="toggleAudio()" title="Mute/Unmute Mic">
+            <svg id="icon-mic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" x2="12" y1="19" y2="22"/>
+            </svg>
+            <svg id="icon-mic-off" style="display:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="2" x2="22" y1="2" y2="22"/>
+              <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
+              <path d="M5 10v2a7 7 0 0 0 12 5"/>
+              <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
+              <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
+              <line x1="12" x2="12" y1="19" y2="22"/>
+            </svg>
+          </button>
+
+          <!-- Camera Toggle -->
+          <button class="dock-btn" id="btn-cam" onclick="toggleVideo()" title="Turn Camera On/Off">
+            <svg id="icon-cam-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/>
+              <rect x="2" y="6" width="14" height="12" rx="2"/>
+            </svg>
+            <svg id="icon-cam-off" style="display:none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="2" x2="22" y1="2" y2="22"/>
+              <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l5.223-3.482a.5.5 0 0 1 .777.416v8.26"/>
+              <path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/>
+            </svg>
+          </button>
+
+          <!-- Screen Share Toggle -->
+          <button class="dock-btn" id="btn-screen" onclick="toggleScreenShare()" title="Share Screen">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <line x1="8" x2="16" y1="21" y2="21"/>
+              <line x1="12" x2="12" y1="17" y2="21"/>
+              <polyline points="15 8 12 5 9 8"/>
+              <line x1="12" x2="12" y1="5" y2="13"/>
+            </svg>
+          </button>
+
+          <!-- Chat Toggle -->
+          <button class="dock-btn" id="btn-chat" onclick="toggleSidebar('chat')" title="In-room Chat">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span class="unread-badge" id="chat-unread-badge">0</span>
+          </button>
+
+          <!-- Participants Toggle -->
+          <button class="dock-btn" id="btn-participants" onclick="toggleSidebar('participants')" title="Participants List">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </button>
+
+          <!-- Hangup / Leave -->
+          <button class="dock-btn btn-hangup" id="btn-hangup" onclick="leaveCall()" title="Leave Meeting">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+              <line x1="23" x2="1" y1="1" y2="23"/>
+            </svg>
+          </button>
+        </nav>
+      </main>
+
+      <!-- Sidebar (Chat & Participants) -->
+      <aside class="room-sidebar" id="room-sidebar">
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab-btn active" id="tab-btn-chat" onclick="switchSidebarTab('chat')">Chat</button>
+          <button class="sidebar-tab-btn" id="tab-btn-participants" onclick="switchSidebarTab('participants')">People</button>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="sidebar-panel active" id="panel-chat">
+          <div class="chat-messages" id="chat-messages">
+            <!-- Messages will appear here -->
+          </div>
+          <form class="chat-input-bar" id="chat-form" onsubmit="sendChatMessage(event)">
+            <input
+              type="text"
+              id="chat-input"
+              class="chat-input"
+              placeholder="Send a message to everyone..."
+              autocomplete="off"
+            >
+            <button type="submit" class="btn-send">Send</button>
+          </form>
+        </div>
+
+        <!-- Participants Panel -->
+        <div class="sidebar-panel" id="panel-participants">
+          <div class="participants-list" id="participants-list">
+            <!-- Dynamic participant list -->
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="room-toast">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <span id="toast-text">Meeting link copied!</span>
+    </div>
+  </div>
+
+  <script src="/static/js/webrtc.js"></script>
+</body>
+</html>
