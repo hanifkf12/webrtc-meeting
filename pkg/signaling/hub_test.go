@@ -2,6 +2,7 @@ package signaling
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -143,6 +144,22 @@ func TestRegisterEnforcesRoomCap(t *testing.T) {
 	}
 	if err := hub.Register(newTestClient(hub, "r", "overflow")); err != ErrRoomFull {
 		t.Fatalf("expected ErrRoomFull, got %v", err)
+	}
+}
+
+func TestRegisterEnforcesTotalRoomCap(t *testing.T) {
+	hub := NewHub()
+	for i := range MaxRooms {
+		if err := hub.Register(newTestClient(hub, fmt.Sprint("room", i), "a")); err != nil {
+			t.Fatalf("register room %d: %v", i, err)
+		}
+	}
+	if err := hub.Register(newTestClient(hub, "one-too-many", "a")); err != ErrTooManyRooms {
+		t.Fatalf("expected ErrTooManyRooms, got %v", err)
+	}
+	// Joining an already-open room is still allowed at the cap.
+	if err := hub.Register(newTestClient(hub, "room0", "b")); err != nil {
+		t.Fatalf("join existing room at cap: %v", err)
 	}
 }
 

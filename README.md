@@ -14,13 +14,14 @@ A lightweight, self-contained multi-user video calling platform built with **Go*
   - Screen sharing via `navigator.mediaDevices.getDisplayMedia` with automatic track replacement.
   - Meeting link copy with toast notification.
   - Live participant roster and counter.
-- **Self-hosted assets**: HTMX 2.0.4 is vendored locally in `static/js/htmx.min.js`. NAT traversal uses Google's public STUN servers; there is no TURN server, so peers behind symmetric NAT may fail to connect.
+- **Self-hosted assets**: HTMX 2.0.4 is vendored locally in `static/js/htmx.min.js`. NAT traversal uses Google's public STUN servers; set `TURN_URL` to add a TURN relay for peers behind symmetric NAT.
 - **Robust signaling**:
   - Offer/answer follows the WebRTC "perfect negotiation" pattern, so simultaneous offers resolve cleanly and ICE restarts on failure.
   - The client auto-reconnects with exponential backoff.
   - Screen sharing works even when you joined without a camera.
 - **Server limits & safety**:
-  - At most 8 participants per room.
+  - At most 8 participants per room and 1000 open rooms.
+  - Each connection is limited to 20 messages/second (burst 200); a flooding client is disconnected.
   - Room and client IDs must match `[a-z0-9_-]{1,64}`; display names are capped at 40 characters and chat messages at 2000.
   - A duplicate client ID in a room is rejected, so a connection cannot hijack another peer.
   - WebSocket upgrades require a same-origin `Origin` header.
@@ -55,6 +56,16 @@ go run main.go
 By default, the server runs on port `8080`. To customize the port:
 ```bash
 PORT=3000 go run main.go
+```
+
+Browsers only allow camera and mic on `localhost` or HTTPS. To join from other devices on your LAN, serve over TLS:
+```bash
+TLS_CERT_FILE=cert.pem TLS_KEY_FILE=key.pem go run main.go
+```
+
+Optional TURN relay (credentials are sent to every room visitor, so use a dedicated low-privilege account):
+```bash
+TURN_URL=turn:turn.example.com:3478 TURN_USERNAME=user TURN_CREDENTIAL=pass go run main.go
 ```
 
 ### 2. Join a Room

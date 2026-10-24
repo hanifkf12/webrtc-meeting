@@ -8,7 +8,7 @@
   <script src="/static/js/htmx.min.js"></script>
 </head>
 <body>
-  <div class="room-app" id="room-app" data-room-id="{{.RoomID}}" data-client-name="{{.Name}}">
+  <div class="room-app" id="room-app" data-room-id="{{.RoomID}}" data-client-name="{{.Name}}" data-turn-server="{{.TURNURL}}" data-turn-username="{{.TURNUsername}}" data-turn-credential="{{.TURNCredential}}">
     <!-- Header -->
     <header class="room-header">
       <div class="room-meta">
@@ -153,6 +153,7 @@
               class="chat-input"
               placeholder="Send a message to everyone..."
               autocomplete="off"
+              maxlength="2000"
             >
             <button type="submit" class="btn-send">Send</button>
           </form>

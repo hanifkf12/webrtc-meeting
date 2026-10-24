@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -253,6 +254,58 @@ func TestWebSocketDuplicateIDClosedWithRetryCode(t *testing.T) {
 	}
 	if err := first.ReadJSON(&m); err != nil || m.Text != "still here" {
 		t.Fatalf("original client broken after duplicate attempt: %v %v", m, err)
+	}
+}
+
+// Browsers JSON.parse each frame, so a burst must never be packed into one frame.
+func TestWebSocketBurstIsOneMessagePerFrame(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http")+"/ws?room=burst&id=burst_a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	const n = 50
+	for range n {
+		if err := conn.WriteJSON(signaling.Message{Type: signaling.TypeChat, Text: "x"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for got := range n + 1 { // existing-peers + n chats
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("after %d messages: %v", got, err)
+		}
+		var m signaling.Message
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("frame is not a single JSON message: %q", raw)
+		}
+	}
+}
+
+func TestWebSocketFloodIsDisconnected(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http")+"/ws?room=flood&id=flood_a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	for range 300 {
+		if err := conn.WriteJSON(signaling.Message{Type: signaling.TypeChat, Text: "spam"}); err != nil {
+			break // server already hung up
+		}
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				t.Fatal("flooding client was not disconnected")
+			}
+			return
+		}
 	}
 }
 

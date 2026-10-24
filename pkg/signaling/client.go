@@ -14,6 +14,11 @@ const (
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512 * 1024 // 512 KB
+	// Token bucket per client: absorbs a join/ICE-restart burst to a full room (offers plus
+	// ~15 candidates per peer), stops floods that would overflow every peer's send buffer.
+	// Burst stays below the 256-slot send buffer.
+	msgBurst = 200
+	msgRate  = 20 // messages per second
 )
 
 // Client represents a single connected peer over WebSocket
@@ -54,6 +59,7 @@ func (c *Client) ReadPump() {
 		return nil
 	})
 
+	tokens, last := float64(msgBurst), time.Now()
 	for {
 		_, rawMessage, err := c.Conn.ReadMessage()
 		if err != nil {
@@ -62,6 +68,15 @@ func (c *Client) ReadPump() {
 			}
 			break
 		}
+
+		now := time.Now()
+		tokens = min(msgBurst, tokens+now.Sub(last).Seconds()*msgRate)
+		last = now
+		if tokens < 1 {
+			log.Printf("client %s [%s] exceeded message rate; disconnecting", c.ID, c.Name)
+			break
+		}
+		tokens--
 
 		var msg Message
 		if err := json.Unmarshal(rawMessage, &msg); err != nil {
@@ -99,15 +114,9 @@ func (c *Client) WritePump() {
 			if err != nil {
 				return
 			}
+			// One JSON message per frame: the browser JSON.parses each frame whole.
 			if _, err := w.Write(message); err != nil {
 				return
-			}
-
-			// Flush any queued messages into current frame to minimize syscall overhead
-			n := len(c.Send)
-			for range n {
-				_, _ = w.Write([]byte{'\n'})
-				_, _ = w.Write(<-c.Send)
 			}
 
 			if err := w.Close(); err != nil {

@@ -11,6 +11,8 @@ import (
 const (
 	// MaxRoomSize caps participants per room; a full WebRTC mesh degrades quickly beyond this.
 	MaxRoomSize = 8
+	// MaxRooms caps concurrently open rooms so room creation cannot exhaust server memory.
+	MaxRooms = 1000
 	// maxChatRunes caps a single chat message.
 	maxChatRunes = 2000
 )
@@ -18,6 +20,8 @@ const (
 var (
 	// ErrRoomFull is returned by Register when the room is at MaxRoomSize.
 	ErrRoomFull = errors.New("room is full")
+	// ErrTooManyRooms is returned by Register when creating a room would exceed MaxRooms.
+	ErrTooManyRooms = errors.New("server has too many open rooms")
 	// ErrDuplicateID is returned by Register when a live client already uses the ID in that room.
 	ErrDuplicateID = errors.New("client id already in use in this room")
 )
@@ -42,6 +46,10 @@ func (h *Hub) Register(c *Client) error {
 	h.mu.Lock()
 	room, exists := h.Rooms[c.RoomID]
 	if !exists {
+		if len(h.Rooms) >= MaxRooms {
+			h.mu.Unlock()
+			return ErrTooManyRooms
+		}
 		room = NewRoom(c.RoomID)
 		h.Rooms[c.RoomID] = room
 	}
@@ -118,8 +126,8 @@ func (h *Hub) HandleMessage(c *Client, msg Message) {
 		if msg.Text == "" || utf8.RuneCountInString(msg.Text) > maxChatRunes {
 			return
 		}
-		// Server owns the timestamp; never trust the client's.
-		msg.Timestamp = time.Now().Format("15:04")
+		// Server owns the timestamp; never trust the client's. UTC so each browser renders local time.
+		msg.Timestamp = time.Now().UTC().Format(time.RFC3339)
 		// Broadcast to all participants including sender
 		room.Broadcast(msg, "")
 

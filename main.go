@@ -70,6 +70,9 @@ func sanitizeName(s string) string {
 type RoomPageData struct {
 	RoomID string
 	Name   string
+	// Optional TURN relay for peers behind symmetric NAT.
+	// shortcut: static credentials are visible to every room visitor; switch to time-limited TURN REST credentials before public use.
+	TURNURL, TURNUsername, TURNCredential string
 }
 
 func init() {
@@ -129,8 +132,11 @@ func handleRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := RoomPageData{
-		RoomID: roomID,
-		Name:   name,
+		RoomID:         roomID,
+		Name:           name,
+		TURNURL:        os.Getenv("TURN_URL"),
+		TURNUsername:   os.Getenv("TURN_USERNAME"),
+		TURNCredential: os.Getenv("TURN_CREDENTIAL"),
 	}
 
 	if err := tmplRoom.Execute(w, data); err != nil {
@@ -142,7 +148,7 @@ func handleRoom(w http.ResponseWriter, r *http.Request) {
 func handleRandomRoom(w http.ResponseWriter, r *http.Request) {
 	slug := randomRoomSlug()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<input type="text" id="room-id" name="room" class="form-input" value="%s" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens, and underscores only">`, slug)
+	fmt.Fprintf(w, `<input type="text" id="room-id" name="room" class="form-input" value="%s" required pattern="[a-zA-Z0-9_-]+" maxlength="64" title="Letters, numbers, hyphens, and underscores only">`, slug)
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -217,9 +223,19 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
+	// Browsers only expose camera/mic on secure origins, so LAN access needs TLS.
+	certFile, keyFile := os.Getenv("TLS_CERT_FILE"), os.Getenv("TLS_KEY_FILE")
+
 	go func() {
-		log.Printf("MeetStream server listening on http://localhost%s", addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if certFile != "" || keyFile != "" { // one missing fails loudly instead of silently serving HTTP
+			log.Printf("MeetStream server listening on https://localhost%s", addr)
+			err = server.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			log.Printf("MeetStream server listening on http://localhost%s", addr)
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
 	}()

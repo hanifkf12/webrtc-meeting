@@ -15,6 +15,7 @@ let ws = null;
 const peerStates = {};      // peerId -> { pc, polite, makingOffer, ignoreOffer, videoSender, remoteStream, ... }
 const peerNames = {};       // peerId -> string (displayName)
 const pendingCandidates = {}; // peerId -> Array of RTCIceCandidateInit
+const peerMedia = {};         // peerId -> last media-toggle payload, applied when the tile appears
 
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 8000;
@@ -35,6 +36,14 @@ const appContainer = document.getElementById('room-app');
 const roomId = appContainer.dataset.roomId;
 const clientName = appContainer.dataset.clientName || 'Anonymous';
 const clientId = 'peer_' + Math.random().toString(36).substring(2, 9);
+// Attribute avoids "url" in its name: html/template would sanitize the turn: scheme to #ZgotmplZ.
+if (appContainer.dataset.turnServer) {
+  rtcConfig.iceServers.push({
+    urls: appContainer.dataset.turnServer,
+    username: appContainer.dataset.turnUsername,
+    credential: appContainer.dataset.turnCredential
+  });
+}
 
 // Init on DOM load
 window.addEventListener('DOMContentLoaded', async () => {
@@ -52,30 +61,43 @@ function setupLocalAvatar() {
 
 // 1. Local Media Initialization
 async function initLocalMedia() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: 'user'
-      }
-    });
-  } catch (err) {
-    console.warn('Could not acquire audio/video stream with preferred constraints:', err);
+  if (!navigator.mediaDevices) {
+    // Browsers hide camera/mic on insecure origins (plain HTTP other than localhost).
+    showToast('Camera and mic need HTTPS or localhost');
+    localStream = new MediaStream();
+  } else {
     try {
-      // Fallback: audio only or default video
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      isVideoEnabled = false;
-      document.getElementById('tile-local').classList.add('cam-off');
-      updateCamButtonUI(false);
-    } catch (fallbackErr) {
-      console.error('No media devices available:', fallbackErr);
-      // Create empty stream so signaling still functions
-      localStream = new MediaStream();
-      isAudioEnabled = false;
-      isVideoEnabled = false;
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user'
+        }
+      });
+    } catch (err) {
+      console.warn('Could not acquire audio/video stream with preferred constraints:', err);
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } catch (fallbackErr) {
+        console.error('No media devices available:', fallbackErr);
+        // Empty stream so signaling still functions
+        localStream = new MediaStream();
+      }
     }
+  }
+
+  // Reflect missing devices in the UI; their toggle buttons have nothing to toggle.
+  if (localStream.getAudioTracks().length === 0) {
+    isAudioEnabled = false;
+    updateMicButtonUI(false);
+    document.getElementById('btn-mic').disabled = true;
+  }
+  if (localStream.getVideoTracks().length === 0) {
+    isVideoEnabled = false;
+    document.getElementById('tile-local').classList.add('cam-off');
+    updateCamButtonUI(false);
+    document.getElementById('btn-cam').disabled = true;
   }
 
   const localVideo = document.getElementById('local-video');
@@ -101,6 +123,8 @@ function initWebSocket() {
   socket.onmessage = (event) => {
     // Serialize handling: SDP/candidate order matters and the handlers are async.
     signalQueue = signalQueue.then(async () => {
+      // onclose already tore down the mesh; stale messages would resurrect peer connections.
+      if (socket !== ws || socket.readyState !== WebSocket.OPEN) return;
       try {
         await handleSignalMessage(JSON.parse(event.data));
       } catch (e) {
@@ -156,12 +180,16 @@ async function handleSignalMessage(msg) {
         }
       }
       updateParticipantsList();
+      // Existing peers only learn our mic/camera state from media-toggle.
+      broadcastMediaState();
       break;
 
     case 'peer-joined':
       // Another peer joined. Store name. The newcomer will send us an offer.
       peerNames[msg.from] = msg.fromName;
       updateParticipantsList();
+      // The newcomer missed our earlier media-toggle messages.
+      broadcastMediaState();
       break;
 
     case 'offer':
@@ -385,6 +413,7 @@ function attachRemoteTrack(peerId, peerName, stream) {
   if (videoEl && videoEl.srcObject !== stream) {
     videoEl.srcObject = stream;
   }
+  if (peerMedia[peerId]) handleRemoteMediaToggle(peerId, peerMedia[peerId]);
 
   updateParticipantsList();
 }
@@ -400,6 +429,7 @@ function handlePeerLeft(peerId) {
   }
   delete peerNames[peerId];
   delete pendingCandidates[peerId];
+  delete peerMedia[peerId];
 
   const card = document.getElementById(`tile-${peerId}`);
   if (card && card.parentNode) {
@@ -411,6 +441,7 @@ function handlePeerLeft(peerId) {
 
 function handleRemoteMediaToggle(peerId, media) {
   if (!media) return;
+  peerMedia[peerId] = media;
   const card = document.getElementById(`tile-${peerId}`);
   if (!card) return;
 
@@ -665,7 +696,8 @@ function renderChatMessage(sender, text, timestamp, isMine) {
 
   const timeSpan = document.createElement('span');
   timeSpan.className = 'chat-time';
-  timeSpan.textContent = timestamp || '';
+  // Server sends RFC 3339 UTC; render in the viewer's local time.
+  timeSpan.textContent = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
   header.appendChild(nameSpan);
   header.appendChild(timeSpan);

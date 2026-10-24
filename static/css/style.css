@@ -386,6 +386,15 @@ body {
   visibility: hidden;
 }
 
+/* A shared screen stays visible even when the camera is off */
+.video-card.cam-off.screen-active .avatar-placeholder {
+  display: none;
+}
+
+.video-card.cam-off.screen-active video {
+  visibility: visible;
+}
+
 /* Control Dock */
 .control-dock {
   position: absolute;
@@ -451,6 +460,12 @@ body {
 
 .dock-btn.btn-hangup:hover {
   background: var(--danger-hover);
+}
+
+.dock-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .unread-badge {
